@@ -93,7 +93,7 @@ export default class Tile {
         })
 
         Tile.ktx2Loader.load(
-          `${SERVER}/textures/${this.tileName}.ktx2`,
+          `${SERVER}/texture/${this.tileName}.ktx2`,
           (texture) => {
             console.log(`${this.tileName}.ktx2 loaded`)
 
