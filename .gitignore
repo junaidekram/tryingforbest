@@ -5,5 +5,5 @@ package-lock.json
 dist
 src/glb50
 src/glb10
-src/textures
+src/texture
 

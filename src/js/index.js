@@ -204,8 +204,8 @@ setInterval(() => {
       // cast a ray from the camera position and straight down towards the terrain
       const hit = tileGeometry.boundsTree.raycastFirst(interSectionRay)
 
-      // if there was no hit we were below the terrain
-      if (!hit) {
+      // flag collision if we were too low or there was no hit (we were under the surface)
+      if (!hit || hit.distance < 4) {
         document.location.href = "collision.html"
       }
     }
