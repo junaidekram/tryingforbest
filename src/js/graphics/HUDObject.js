@@ -49,6 +49,7 @@ export default class HUDObject {
     this.agl = Math.round(airplaneState.alt - airplaneState.groundHeight) // altitude above ground
     this.gearDown = airplaneState.gearDown
     this.onGround = airplaneState.onGround
+    this.speedbrake = airplaneState.speedbrake
   }
 
   getTextBoundingBox(text) {
@@ -208,15 +209,26 @@ export default class HUDObject {
     const aglText = this.agl.toLocaleString(undefined, { maximumFractionDigits: 0 })
     this.ctx.fillText(`AGL ${aglText}`, 0.72 * this.width, 0.24 * this.height)
     
-    // Gear indicator
-    const gearText = this.gearDown ? "GEAR DOWN" : "GEAR UP"
+    // Gear indicator - prominent display
+    const gearText = this.gearDown ? "▼ GEAR DOWN" : "▲ GEAR UP"
     this.ctx.fillStyle = this.gearDown ? "#20ff40" : "#ff4020"
-    this.ctx.fillText(gearText, 0.72 * this.width, 0.86 * this.height)
-    this.ctx.fillStyle = "#20ff40" // reset color
+    this.ctx.font = "bold 1.8em Monaco"
+    this.ctx.fillText(gearText, 0.68 * this.width, 0.86 * this.height)
+    
+    // Speedbrake indicator
+    const speedbrakeText = `SPEEDBRAKE ${Math.round(this.speedbrake)}°`
+    this.ctx.fillStyle = this.speedbrake > 0 ? "#ffff20" : "#20ff40"
+    this.ctx.fillText(speedbrakeText, 0.68 * this.width, 0.9 * this.height)
+    
+    // Reset font and color
+    this.ctx.font = "1.5em Monaco"
+    this.ctx.fillStyle = "#20ff40"
     
     // On ground indicator
     if (this.onGround) {
-      this.ctx.fillText("ON GROUND", 0.72 * this.width, 0.9 * this.height)
+      this.ctx.fillStyle = "#40ff40"
+      this.ctx.fillText("● ON GROUND", 0.68 * this.width, 0.94 * this.height)
+      this.ctx.fillStyle = "#20ff40"
     }
 
     this.drawPitchLadder()

@@ -284,8 +284,9 @@ function drawScene(currentFrametime) {
 
   airplaneControlInput.normalizeControls()
   
-  // Update gear state (instant for now - could add animation)
+  // Update gear state and speedbrake (instant for now - could add animation)
   airplaneState.gearDown = airplaneControlInput.gearLever
+  airplaneState.speedbrake = airplaneControlInput.speedbrake
 
   const stateDerivative = f16simulation.getStateDerivative(airplaneControlInput, airplaneState)
   airplaneState.integrate(stateDerivative, frameTime * 0.001)

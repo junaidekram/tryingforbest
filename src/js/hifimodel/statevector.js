@@ -32,6 +32,7 @@ export default class StateVector {
     this.onGround = false // whether aircraft is on the ground
     this.verticalSpeed = 0 // ft/sec, rate of altitude change
     this.groundHeight = 0 // feet, terrain elevation at aircraft position
+    this.speedbrake = 0 // degrees, 0 to 60
   }
 
   init(startPoint, startDirection) {
