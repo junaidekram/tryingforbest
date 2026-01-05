@@ -12,6 +12,8 @@ export default class InputVector {
     this.aileron = 0 // degrees
     this.rudder = 0 // degrees
     this.speedbrake = 0 // degrees
+    this.gearLever = true // landing gear down
+    this.brakes = 0 // 0.0 to 1.0, brake pressure
     this.internalView = true
   }
 
@@ -26,6 +28,7 @@ export default class InputVector {
       SimulationConstants.SPEEDBRAKE_MIN,
       SimulationConstants.SPEEDBRAKE_MAX
     )
+    this.brakes = this.limiter(this.brakes, 0.0, 1.0)
 
     // center elevator and aileron around the trim value
     this.elevator = (this.elevator - SimulationConstants.ELEVATOR_TRIM) * 0.98 + SimulationConstants.ELEVATOR_TRIM

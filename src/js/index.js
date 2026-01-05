@@ -152,6 +152,14 @@ window.addEventListener("resize", () => {
   resetViewport()
 })
 window.addEventListener("keydown", keyboardHandler)
+window.addEventListener("keyup", (keyboardEvent) => {
+  const key = keyboardEvent.key
+  switch (key) {
+    case "b": // release brakes
+      airplaneControlInput.brakes = 0.0
+      break
+  }
+})
 
 window.addEventListener("gamepadconnected", (event) => {
   console.log("Gamepad %s connected", event.gamepad.id)
@@ -176,7 +184,7 @@ setInterval(() => {
   chaseObject.addPoint(f16)
 }, ChaseObject.timeInterval)
 
-// check for ground collision
+// check for ground collision and landing
 setInterval(() => {
   // get the coordinates of the tile surrounding the camera
   const tileXOffset = (camera.position.x - MINX) % TILE_EXTENTS
@@ -204,9 +212,44 @@ setInterval(() => {
       // cast a ray from the camera position and straight down towards the terrain
       const hit = tileGeometry.boundsTree.raycastFirst(interSectionRay)
 
-      // flag collision if we were too low or there was no hit (we were under the surface)
-      if (!hit || hit.distance < 4) {
-        document.location.href = "collision.html"
+      if (hit) {
+        const distanceToGround = hit.distance * SimulationConstants.METERS_TO_FEET
+        airplaneState.groundHeight = airplaneState.alt - distanceToGround
+        
+        // Check if gear is touching ground
+        const gearClearance = distanceToGround - SimulationConstants.GEAR_HEIGHT
+        
+        if (gearClearance <= 0) {
+          // Gear is in contact with ground
+          if (!airplaneState.onGround) {
+            // Touchdown moment - check landing quality
+            const verticalSpeed = Math.abs(airplaneState.verticalSpeed)
+            const bankAngle = Math.abs(airplaneState.phi * SimulationConstants.RTOD)
+            const pitchAngle = airplaneState.theta * SimulationConstants.RTOD
+            
+            // Crash conditions: hard landing, extreme bank, or gear up
+            if (verticalSpeed > SimulationConstants.HARD_LANDING_THRESHOLD || 
+                bankAngle > 10 || 
+                pitchAngle < -5 || 
+                pitchAngle > 15 ||
+                !airplaneState.gearDown) {
+              document.location.href = "collision.html"
+              return
+            }
+            
+            // Successful touchdown
+            console.log(`Touchdown! Vertical speed: ${verticalSpeed.toFixed(1)} ft/sec, Bank: ${bankAngle.toFixed(1)}°, Pitch: ${pitchAngle.toFixed(1)}°`)
+          }
+          airplaneState.onGround = true
+        } else if (gearClearance > 2) {
+          // Clear separation from ground
+          airplaneState.onGround = false
+        }
+      } else {
+        // No hit means we're underground - crash
+        if (!airplaneState.onGround) {
+          document.location.href = "collision.html"
+        }
       }
     }
   }
@@ -240,6 +283,9 @@ function drawScene(currentFrametime) {
   }
 
   airplaneControlInput.normalizeControls()
+  
+  // Update gear state (instant for now - could add animation)
+  airplaneState.gearDown = airplaneControlInput.gearLever
 
   const stateDerivative = f16simulation.getStateDerivative(airplaneControlInput, airplaneState)
   airplaneState.integrate(stateDerivative, frameTime * 0.001)
@@ -391,6 +437,13 @@ function keyboardHandler(keyboardEvent) {
       break
     case "h": // hud toggle
       hudPlane.visible = !hudPlane.visible
+      break
+    case "g": // landing gear toggle
+      airplaneControlInput.gearLever = !airplaneControlInput.gearLever
+      console.log(`Landing gear: ${airplaneControlInput.gearLever ? "DOWN" : "UP"}`)
+      break
+    case "b": // brakes
+      airplaneControlInput.brakes = 1.0
       break
     case "z": // rudder left
       airplaneControlInput.rudder += 0.3

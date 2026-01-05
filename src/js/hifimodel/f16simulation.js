@@ -249,9 +249,37 @@ export default class F16Simulation {
     const Ybar = this.atmosphericModel.qbar * S * Cy_tot
     const Zbar = this.atmosphericModel.qbar * S * Cz_tot
 
-    const Udot = R * V - Q * W - g * st + (Xbar + T) / m
-    const Vdot = P * W - R * U + g * ct * sphi + Ybar / m
-    const Wdot = Q * U - P * V + g * ct * cphi + Zbar / m
+    // Add ground effect and ground contact forces
+    let groundNormalForce = 0
+    let groundFrictionForce = 0
+    
+    if (x.onGround) {
+      // Ground normal force (prevents penetration)
+      const compression = Math.max(0, x.groundHeight + SimulationConstants.GEAR_HEIGHT - x.alt)
+      groundNormalForce = SimulationConstants.GROUND_SPRING_K * compression + 
+                          SimulationConstants.GROUND_DAMPER_C * Math.max(0, -xd.alt)
+      
+      // Ground friction (rolling + braking)
+      const mu = SimulationConstants.MU_ROLLING + u.brakes * (SimulationConstants.MU_BRAKING - SimulationConstants.MU_ROLLING)
+      const horizontalSpeed = Math.sqrt(U * U + V * V)
+      if (horizontalSpeed > 0.1) {
+        groundFrictionForce = mu * groundNormalForce
+      }
+    }
+    
+    // Ground effect (increased lift near ground)
+    let groundEffectFactor = 1.0
+    const heightAboveGround = x.alt - x.groundHeight
+    if (heightAboveGround < SimulationConstants.GROUND_EFFECT_HEIGHT && heightAboveGround > 0) {
+      // Lift increases by up to 10% in ground effect
+      groundEffectFactor = 1.0 + 0.1 * (1.0 - heightAboveGround / SimulationConstants.GROUND_EFFECT_HEIGHT)
+    }
+    
+    const Zbar_effective = Zbar * groundEffectFactor
+    
+    const Udot = R * V - Q * W - g * st + (Xbar + T - groundFrictionForce * (U / vt)) / m
+    const Vdot = P * W - R * U + g * ct * sphi + (Ybar - groundFrictionForce * (V / vt)) / m
+    const Wdot = Q * U - P * V + g * ct * cphi + (Zbar_effective + groundNormalForce) / m
 
     /*
     const Udot = R * V - Q * W + (Xbar + T) / m + 2 * (q1 * q3 - q0 * q2) * g

@@ -28,6 +28,10 @@ export default class StateVector {
     this.ny = 0
     this.nz = 0
     this.pow = 0 // percent, 0 <= pow <= 100
+    this.gearDown = true // landing gear state
+    this.onGround = false // whether aircraft is on the ground
+    this.verticalSpeed = 0 // ft/sec, rate of altitude change
+    this.groundHeight = 0 // feet, terrain elevation at aircraft position
   }
 
   init(startPoint, startDirection) {
@@ -98,5 +102,6 @@ export default class StateVector {
     this.nz = v.nz
 
     this.pow += dt * v.pow
+    this.verticalSpeed = v.alt // store vertical velocity (ft/sec)
   }
 }

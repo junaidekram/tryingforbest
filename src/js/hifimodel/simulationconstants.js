@@ -57,3 +57,23 @@ SimulationConstants.IZZ = 63100.0
 SimulationConstants.IXZ = 982.0
 
 SimulationConstants.HENG = 160.0 // engine angular momentum (slug-ft2/sec)
+
+// Landing gear positions (feet, relative to CG)
+SimulationConstants.MAIN_GEAR_LEFT_X = -2.0
+SimulationConstants.MAIN_GEAR_LEFT_Y = -4.5
+SimulationConstants.MAIN_GEAR_LEFT_Z = -7.0
+SimulationConstants.MAIN_GEAR_RIGHT_X = -2.0
+SimulationConstants.MAIN_GEAR_RIGHT_Y = 4.5
+SimulationConstants.MAIN_GEAR_RIGHT_Z = -7.0
+SimulationConstants.NOSE_GEAR_X = 12.0
+SimulationConstants.NOSE_GEAR_Y = 0.0
+SimulationConstants.NOSE_GEAR_Z = -7.0
+
+// Ground physics constants
+SimulationConstants.GEAR_HEIGHT = 7.0 // gear strut length, feet
+SimulationConstants.MU_ROLLING = 0.02 // rolling friction coefficient
+SimulationConstants.MU_BRAKING = 0.5 // braking friction coefficient
+SimulationConstants.HARD_LANDING_THRESHOLD = 10.0 // ft/sec vertical speed
+SimulationConstants.GROUND_SPRING_K = 50000.0 // gear spring constant, lbf/ft
+SimulationConstants.GROUND_DAMPER_C = 5000.0 // gear damping constant, lbf/(ft/sec)
+SimulationConstants.GROUND_EFFECT_HEIGHT = 50.0 // ground effect starts below this altitude, feet

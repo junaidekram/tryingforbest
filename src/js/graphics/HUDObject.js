@@ -45,6 +45,10 @@ export default class HUDObject {
     this.aoa = airplaneState.alpha
 
     this.g = airplaneState.nz
+    this.verticalSpeed = Math.round(airplaneState.verticalSpeed * 60) // convert to ft/min
+    this.agl = Math.round(airplaneState.alt - airplaneState.groundHeight) // altitude above ground
+    this.gearDown = airplaneState.gearDown
+    this.onGround = airplaneState.onGround
   }
 
   getTextBoundingBox(text) {
@@ -195,6 +199,25 @@ export default class HUDObject {
     const gText = "" + this.g.toFixed(1)
 
     this.ctx.fillText(`${gText}G`, 30, 0.2 * this.height)
+    
+    // Vertical Speed Indicator (VSI) in ft/min
+    const vsiText = this.verticalSpeed >= 0 ? `+${this.verticalSpeed}` : `${this.verticalSpeed}`
+    this.ctx.fillText(`VSI ${vsiText}`, 0.72 * this.width, 0.2 * this.height)
+    
+    // Altitude Above Ground Level (AGL)
+    const aglText = this.agl.toLocaleString(undefined, { maximumFractionDigits: 0 })
+    this.ctx.fillText(`AGL ${aglText}`, 0.72 * this.width, 0.24 * this.height)
+    
+    // Gear indicator
+    const gearText = this.gearDown ? "GEAR DOWN" : "GEAR UP"
+    this.ctx.fillStyle = this.gearDown ? "#20ff40" : "#ff4020"
+    this.ctx.fillText(gearText, 0.72 * this.width, 0.86 * this.height)
+    this.ctx.fillStyle = "#20ff40" // reset color
+    
+    // On ground indicator
+    if (this.onGround) {
+      this.ctx.fillText("ON GROUND", 0.72 * this.width, 0.9 * this.height)
+    }
 
     this.drawPitchLadder()
     this.drawFlightPathMarker()
