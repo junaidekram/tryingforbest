@@ -6,7 +6,10 @@ import { MeshoptDecoder } from "../externals/meshopt_decoder.module"
 const url = new URL(document.location)
 const urlParams = url.searchParams
 
-const SERVER = urlParams.has("local") ? "" : "https://s3-eu-west-1.amazonaws.com/kd-flightsim"
+// Use CloudFront CDN which should be publicly accessible
+const SERVER = urlParams.has("local") 
+  ? "" 
+  : "https://d3hfnm0j2c2mh2.cloudfront.net"
 
 export default class Tile {
   constructor(scene, terrain, tileExtents, lowerLeft) {

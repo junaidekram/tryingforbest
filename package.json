@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "cesium": "^1.123.0",
     "proj4": "^2.19.5",
     "three": "^0.178.0",
     "three-mesh-bvh": "^0.9.1"

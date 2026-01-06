@@ -1,5 +1,4 @@
-import Tile from "./terrain/tile.js"
-import Terrain from "./terrain/terrain.js"
+import CesiumTerrain from "./terrain/cesiumterrain.js"
 import {
   WebGLRenderer,
   Scene,
@@ -137,7 +136,7 @@ camera.position.set(startPoint[0], startPoint[1], startPoint[2])
 // compensate for unknown offset in compass direction
 startDirection += 8
 
-const terrain = new Terrain(scene, MINX, MINY, MAXX, MAXY, renderer)
+const terrain = new CesiumTerrain(scene)
 
 // set up physics simulation
 const f16simulation = new F16Simulation()
@@ -173,8 +172,6 @@ window.addEventListener("gamepaddisconnected", (event) => {
 
 // log scene stats
 setInterval(() => {
-  //  console.log("Time offset: " + (new Date().getTime() - startTime))
-  console.log("Tiles loaded: " + Tile.loadCount)
   console.log("Textures rendered: " + renderer.info.memory.textures)
   console.log("Geometries rendered: " + renderer.info.memory.geometries)
   console.log("Triangles rendered: " + renderer.info.render.triangles)
@@ -186,90 +183,35 @@ setInterval(() => {
 }, ChaseObject.timeInterval)
 
 // check for ground collision and landing
-setInterval(() => {
-  // get the coordinates of the tile surrounding the camera
-  const tileXOffset = (camera.position.x - MINX) % TILE_EXTENTS
-  const x = Math.round(camera.position.x - tileXOffset)
+let lastElevationQuery = 0
+setInterval(async () => {
+  // Throttle elevation queries to avoid overwhelming the API
+  const now = Date.now()
+  if (now - lastElevationQuery < 500) return
+  lastElevationQuery = now
 
-  const tileYOffset = (camera.position.y - MINY) % TILE_EXTENTS
-  const y = Math.round(camera.position.y - tileYOffset)
+  try {
+    // Get current position in UTM coordinates
+    const east = camera.position.x
+    const north = camera.position.y
+    const altitudeMeters = camera.position.z
 
-  // get the tile
-  const tile = terrain.tiles.get(`${x}-${y}`)
-  if (tile && tile.loaded) {
-    const cameraElevationMeters = camera.position.z
-    const tileGeometry = tile.tileMesh.geometry
-
-    // in the GLB, y is up, so read max y to get max elevation
-    const maxElevationInTile = tileGeometry.boundingBox.max.y
-
-    // optimization: only do ray casting if we are below the max elevation for the tile
-    if (cameraElevationMeters < maxElevationInTile + 1000) {
-      // set ray origin to the camera position
-      // use relative coordinates inside the tile to match the geometry's coordinates
-      // and convert from z up to y up
-      interSectionRay.origin.set(tileXOffset, cameraElevationMeters, -tileYOffset)
-
-      // cast a ray from the camera position and straight down towards the terrain
-      const hit = tileGeometry.boundsTree.raycastFirst(interSectionRay)
-
-      if (hit) {
-        // Distance to ground in meters
-        const distanceToGroundMeters = hit.distance
-        // Convert terrain height to feet for state
-        const terrainHeightMeters = cameraElevationMeters - distanceToGroundMeters
-        airplaneState.groundHeight = terrainHeightMeters * SimulationConstants.METERS_TO_FEET
-        
-        // Altitude in feet
-        const altitudeFeet = airplaneState.alt
-        const groundHeightFeet = airplaneState.groundHeight
-        const heightAboveGround = altitudeFeet - groundHeightFeet
-        
-        // Check if gear is touching ground (within gear strut length)
-        const gearTouchesGround = heightAboveGround <= SimulationConstants.GEAR_HEIGHT
-        
-        if (gearTouchesGround) {
-          // Gear is in contact with ground
-          if (!airplaneState.onGround) {
-            // Touchdown moment - check landing quality
-            const verticalSpeed = Math.abs(airplaneState.verticalSpeed)
-            const bankAngle = Math.abs(airplaneState.phi * SimulationConstants.RTOD)
-            const pitchAngle = airplaneState.theta * SimulationConstants.RTOD
-            const airspeed = airplaneState.vt * 0.592484 // Convert to knots
-            
-            console.log(`Landing attempt: VS=${verticalSpeed.toFixed(1)} ft/s, Bank=${bankAngle.toFixed(1)}°, Pitch=${pitchAngle.toFixed(1)}°, Speed=${airspeed.toFixed(0)} kt, Gear=${airplaneState.gearDown}`)
-            
-            // Crash conditions: hard landing, extreme bank, bad pitch, too fast, or gear up
-            const hardLanding = verticalSpeed > SimulationConstants.HARD_LANDING_THRESHOLD
-            const extremeBank = bankAngle > 15
-            const badPitch = pitchAngle < -10 || pitchAngle > 20
-            const gearUp = !airplaneState.gearDown
-            const tooFast = airspeed > 200 // F-16 landing speed ~150-180 knots
-            
-            if (hardLanding || extremeBank || badPitch || gearUp || tooFast) {
-              console.log(`CRASH: Hard=${hardLanding} Bank=${extremeBank} Pitch=${badPitch} GearUp=${gearUp} Fast=${tooFast}`)
-              document.location.href = "collision.html"
-              return
-            }
-            
-            // Successful touchdown
-            console.log(`✓ SUCCESSFUL LANDING! VS=${verticalSpeed.toFixed(1)} ft/s, Bank=${bankAngle.toFixed(1)}°, Pitch=${pitchAngle.toFixed(1)}°`)
-          }
-          airplaneState.onGround = true
-        } else if (heightAboveGround > 20) {
-          // Clear separation from ground
-          airplaneState.onGround = false
-        }
-      } else {
-        // No hit means we're underground - crash
-        if (!airplaneState.onGround) {
-          console.log(`CRASH: Underground`)
-          document.location.href = "collision.html"
-        }
-      }
+    // Query elevation from Cesium (this uses cached values for performance)
+    const terrainHeightMeters = await terrain.getElevationAtUTM(east, north)
+    const heightAboveGroundMeters = altitudeMeters - terrainHeightMeters
+    
+    // Update state with terrain height
+    airplaneState.groundHeight = terrainHeightMeters * SimulationConstants.METERS_TO_FEET
+    
+    // Simple collision detection - if we're below 4 meters AGL
+    if (heightAboveGroundMeters < 4) {
+      // Collision detected!
+      document.location.href = "collision.html"
     }
+  } catch (error) {
+    console.warn("Elevation query error:", error)
   }
-}, 200)
+}, 500)
 
 // the actual program startup
 async function start() {
