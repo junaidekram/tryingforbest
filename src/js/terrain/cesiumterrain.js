@@ -92,6 +92,7 @@ export default class CesiumTerrain {
     }
     
     this.loadingTiles.add(tileKey)
+    console.log(`Loading tile: ${tileKey}`)
     
     try {
       const provider = await this.terrainProvider
@@ -109,6 +110,8 @@ export default class CesiumTerrain {
         }
       }
       
+      console.log(`Sampling ${positions.length} elevation points for tile ${tileKey}...`)
+      
       // Get elevations from Cesium
       const sampledPositions = await Cesium.sampleTerrainMostDetailed(provider, positions)
       
@@ -117,10 +120,15 @@ export default class CesiumTerrain {
       const vertices = geometry.attributes.position.array
       
       // Apply elevation to vertices
+      let minElev = Infinity, maxElev = -Infinity
       for (let i = 0; i < sampledPositions.length; i++) {
         const elevation = sampledPositions[i].height || 0
         vertices[i * 3 + 2] = elevation // Z coordinate
+        minElev = Math.min(minElev, elevation)
+        maxElev = Math.max(maxElev, elevation)
       }
+      
+      console.log(`Tile ${tileKey}: elevation range ${minElev.toFixed(0)}m to ${maxElev.toFixed(0)}m`)
       
       geometry.attributes.position.needsUpdate = true
       geometry.computeVertexNormals()
@@ -144,7 +152,7 @@ export default class CesiumTerrain {
       this.scene.add(mesh)
       this.tiles.set(tileKey, { mesh, size })
       
-      console.log(`Tile ${tileKey} loaded`)
+      console.log(`✓ Tile ${tileKey} loaded and added to scene`)
       
     } catch (error) {
       console.error(`Error creating tile ${tileKey}:`, error)
@@ -204,6 +212,13 @@ export default class CesiumTerrain {
     // Get camera position in UTM
     const camEast = camera.position.x
     const camNorth = camera.position.y
+    const camAlt = camera.position.z
+    
+    // Debug every 3 seconds
+    if (!this.lastDebug || Date.now() - this.lastDebug > 3000) {
+      console.log(`Camera: E=${camEast.toFixed(0)}, N=${camNorth.toFixed(0)}, Alt=${camAlt.toFixed(0)}m, Tiles=${this.tiles.size}`)
+      this.lastDebug = Date.now()
+    }
     
     // Tile size
     const tileSize = 12750 // ~12.75 km

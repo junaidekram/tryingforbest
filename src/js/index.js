@@ -138,6 +138,8 @@ startDirection += 8
 
 const terrain = new CesiumTerrain(scene)
 
+console.log(`Starting position: E=${startPoint[0].toFixed(0)}, N=${startPoint[1].toFixed(0)}, Alt=${startPoint[2].toFixed(0)}m`)
+
 // set up physics simulation
 const f16simulation = new F16Simulation()
 const airplaneState = new StateVector()
@@ -315,7 +317,7 @@ function drawScene(currentFrametime) {
       break
   }
 
-  terrain.update(camera, showWireFrame)
+  terrain.update(cameras[currentCamera], showWireFrame)
   engineSound.update(cameras[currentCamera], f16, airplaneState.pow)
 
   renderer.render(scene, cameras[currentCamera])
