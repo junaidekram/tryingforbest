@@ -1,10 +1,7 @@
 services:
   - type: web
     name: flightsimulator
-    env: static
+    env: node
     buildCommand: yarn install && yarn build
-    staticPublishPath: ./dist
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
+    startCommand: yarn start
+    healthCheckPath: /
