@@ -273,19 +273,48 @@ setInterval(() => {
 
 // the actual program startup
 async function start() {
-  const audioContext = new window.AudioContext()
-  await audioContext.audioWorklet.addModule("js/audio/brown-noise-processor.js")
-  engineSound = new EngineSound()
+  try {
+    console.log("Game starting...")
+    
+    // Make canvases visible first
+    const webglCanvas = document.getElementById("webgl")
+    const hudCanvasElement = document.getElementById("hud")
+    const buttonContainer = document.getElementById("buttoncontainer")
+    
+    if (!webglCanvas) {
+      console.error("WebGL canvas not found!")
+      return
+    }
+    if (!hudCanvasElement) {
+      console.error("HUD canvas not found!")
+      return
+    }
+    if (!buttonContainer) {
+      console.error("Button container not found!")
+      return
+    }
+    
+    // Hide button, show canvases
+    buttonContainer.style.display = "none"
+    webglCanvas.style.display = "block"
+    hudCanvasElement.style.display = "block"
+    
+    // Initialize audio
+    const audioContext = new window.AudioContext()
+    await audioContext.audioWorklet.addModule("js/audio/brown-noise-processor.js")
+    engineSound = new EngineSound()
 
-  audioContext.resume()
-  engineSound.start(audioContext)
+    audioContext.resume()
+    engineSound.start(audioContext)
+    
+    console.log("Audio initialized, starting simulation...")
 
-  // remove start button
-  document.getElementById("buttoncontainer").style.display = "none"
-  canvas.style.display = "block"
-
-  resetViewport()
-  drawScene()
+    resetViewport()
+    drawScene()
+  } catch (error) {
+    console.error("Error starting game:", error)
+    alert("Error starting game: " + error.message)
+  }
 }
 
 function drawScene(currentFrametime) {
