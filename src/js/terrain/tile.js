@@ -81,8 +81,13 @@ export default class Tile {
   }
 
   load() {
+    const glbUrl = `${SERVER}/glb50/${this.tileName}.glb`
+    const texUrl = `${SERVER}/texture/${this.tileName}.ktx2`
+    
+    console.log(`Loading tile ${this.tileName} from ${glbUrl}`)
+    
     Tile.gltfLoader.load(
-      `${SERVER}/glb50/${this.tileName}.glb`,
+      glbUrl,
       (gltf) => {
         this.tileMesh.geometry = gltf.scene.children[0].geometry
 
@@ -93,7 +98,7 @@ export default class Tile {
         })
 
         Tile.ktx2Loader.load(
-          `${SERVER}/texture/${this.tileName}.ktx2`,
+          texUrl,
           (texture) => {
             console.log(`${this.tileName}.ktx2 loaded`)
 
@@ -111,13 +116,15 @@ export default class Tile {
           },
           () => {},
           (error) => {
-            console.log(`Texture error loading ${this.tileName}.ktx2:`, error)
+            console.error(`Texture error loading ${this.tileName}.ktx2:`, error)
+            this.loading = false
           }
         )
       },
       () => {},
       (error) => {
-        console.log(`GLB Error loading ${this.tileName}.glb:`, error)
+        console.error(`GLB Error loading ${this.tileName}.glb from ${glbUrl}:`, error)
+        this.loading = false
       }
     )
   }
@@ -130,3 +137,4 @@ Tile.ktx2Loader.setTranscoderPath("js/externals/basis/")
 Tile.ktx2Loader.setCrossOrigin("anonymous")
 
 Tile.gltfLoader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder)
+Tile.gltfLoader.setCrossOrigin("anonymous")
