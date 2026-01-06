@@ -14,23 +14,54 @@ export default class CesiumTerrain {
     // Define UTM33N projection for Norway
     this.utm33Projection = "+proj=utm +zone=33 +datum=WGS84 +units=m +no_defs"
     
+    // Add a fallback ground plane
+    this.addGroundPlane()
+    
     // Initialize Cesium's terrain and imagery providers
     this.initializeCesium()
     
     console.log("Cesium 3D terrain initialized")
   }
   
-  async initializeCesium() {
-    // Cesium World Terrain for elevation
-    this.terrainProvider = Cesium.createWorldTerrainAsync({
-      requestWaterMask: false,
-      requestVertexNormals: false
+  addGroundPlane() {
+    // Fallback ground plane
+    const geometry = new PlaneGeometry(500000, 500000, 50, 50)
+    const material = new MeshBasicMaterial({ 
+      color: 0x4a7c59,
+      wireframe: false
     })
     
-    // Bing Maps imagery for satellite photos
-    this.imageryProvider = new Cesium.IonImageryProvider({ assetId: 2 })
-    
-    console.log("Cesium providers initialized")
+    this.groundPlane = new Mesh(geometry, material)
+    this.groundPlane.rotation.x = -Math.PI / 2
+    this.groundPlane.position.z = -100
+    this.scene.add(this.groundPlane)
+    console.log("Ground plane added")
+  }
+  
+  async initializeCesium() {
+    try {
+      console.log("Initializing Cesium terrain provider...")
+      // Cesium World Terrain for elevation
+      this.terrainProvider = Cesium.createWorldTerrainAsync({
+        requestWaterMask: false,
+        requestVertexNormals: false
+      }).then(provider => {
+        console.log("✓ Cesium terrain provider ready")
+        return provider
+      }).catch(err => {
+        console.error("Error initializing terrain provider:", err)
+        return null
+      })
+      
+      console.log("Initializing Cesium imagery provider...")
+      // Bing Maps imagery for satellite photos
+      this.imageryProvider = new Cesium.IonImageryProvider({ assetId: 2 })
+      console.log("✓ Cesium imagery provider ready")
+      
+      console.log("✓ Cesium providers initialized")
+    } catch (error) {
+      console.error("Error in initializeCesium:", error)
+    }
   }
   
   /**

@@ -1,4 +1,4 @@
-import CesiumTerrain from "./terrain/cesiumterrain.js"
+import SimpleTerrain from "./terrain/simpleterrain.js"
 import {
   WebGLRenderer,
   Scene,
@@ -136,7 +136,7 @@ camera.position.set(startPoint[0], startPoint[1], startPoint[2])
 // compensate for unknown offset in compass direction
 startDirection += 8
 
-const terrain = new CesiumTerrain(scene)
+const terrain = new SimpleTerrain(scene)
 
 console.log(`Starting position: E=${startPoint[0].toFixed(0)}, N=${startPoint[1].toFixed(0)}, Alt=${startPoint[2].toFixed(0)}m`)
 
@@ -189,7 +189,7 @@ let lastElevationQuery = 0
 setInterval(async () => {
   // Throttle elevation queries to avoid overwhelming the API
   const now = Date.now()
-  if (now - lastElevationQuery < 500) return
+  if (now - lastElevationQuery < 1000) return
   lastElevationQuery = now
 
   try {
@@ -198,22 +198,31 @@ setInterval(async () => {
     const north = camera.position.y
     const altitudeMeters = camera.position.z
 
-    // Query elevation from Cesium (this uses cached values for performance)
-    const terrainHeightMeters = await terrain.getElevationAtUTM(east, north)
-    const heightAboveGroundMeters = altitudeMeters - terrainHeightMeters
-    
-    // Update state with terrain height
-    airplaneState.groundHeight = terrainHeightMeters * SimulationConstants.METERS_TO_FEET
-    
-    // Simple collision detection - if we're below 4 meters AGL
-    if (heightAboveGroundMeters < 4) {
-      // Collision detected!
+    // For now, use a simple collision check: if altitude drops below 50m above sea level
+    if (altitudeMeters < 50) {
+      console.log(`COLLISION: Alt=${altitudeMeters.toFixed(0)}m`)
       document.location.href = "collision.html"
+      return
+    }
+    
+    // Also query elevation from Cesium for ground height info
+    if (terrain && terrain.getElevationAtUTM) {
+      const terrainHeightMeters = await terrain.getElevationAtUTM(east, north)
+      const heightAboveGroundMeters = altitudeMeters - terrainHeightMeters
+      
+      // Update state with terrain height
+      airplaneState.groundHeight = terrainHeightMeters * SimulationConstants.METERS_TO_FEET
+      
+      // Collision if below 4 meters AGL
+      if (heightAboveGroundMeters < 4 && heightAboveGroundMeters > 0) {
+        console.log(`COLLISION: Height above ground=${heightAboveGroundMeters.toFixed(1)}m`)
+        document.location.href = "collision.html"
+      }
     }
   } catch (error) {
     console.warn("Elevation query error:", error)
   }
-}, 500)
+}, 1000)
 
 // the actual program startup
 async function start() {
