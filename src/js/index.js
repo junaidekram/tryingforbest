@@ -1,4 +1,4 @@
-import SimpleTerrain from "./terrain/simpleterrain.js"
+import CesiumTerrain from "./terrain/cesiumterrain.js"
 import {
   WebGLRenderer,
   Scene,
@@ -136,9 +136,12 @@ camera.position.set(startPoint[0], startPoint[1], startPoint[2])
 // compensate for unknown offset in compass direction
 startDirection += 8
 
-const terrain = new SimpleTerrain(scene)
+// Initialize Cesium terrain with your API key
+const CESIUM_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI5NTUyZGRhMC1lNTljLTRiMjctYmJhYi05MTYwNmZkNTJmNjAiLCJpZCI6Mzc1NTYwLCJpYXQiOjE3Njc3MTUyMDN9.vHCLoFzJMq9OtKoyPqVMgRIeH1kBO25YS7zUdKSO3SA"
+const terrain = new CesiumTerrain(scene, CESIUM_API_KEY)
 
 console.log(`Starting position: E=${startPoint[0].toFixed(0)}, N=${startPoint[1].toFixed(0)}, Alt=${startPoint[2].toFixed(0)}m`)
+console.log(`Cesium terrain initialized with real elevation data`)
 
 // set up physics simulation
 const f16simulation = new F16Simulation()
@@ -184,45 +187,43 @@ setInterval(() => {
   chaseObject.addPoint(f16)
 }, ChaseObject.timeInterval)
 
-// check for ground collision and landing
+// check for ground collision and landing - using real Cesium terrain elevation
 let lastElevationQuery = 0
 setInterval(async () => {
-  // Throttle elevation queries to avoid overwhelming the API
-  const now = Date.now()
-  if (now - lastElevationQuery < 1000) return
-  lastElevationQuery = now
-
   try {
-    // Get current position in UTM coordinates
-    const east = camera.position.x
-    const north = camera.position.y
-    const altitudeMeters = camera.position.z
+    const east = f16Container.position.x
+    const north = f16Container.position.y
+    const altitudeMeters = f16Container.position.z
 
-    // For now, use a simple collision check: if altitude drops below 50m above sea level
-    if (altitudeMeters < 50) {
-      console.log(`COLLISION: Alt=${altitudeMeters.toFixed(0)}m`)
-      document.location.href = "collision.html"
-      return
-    }
+    // Get actual ground elevation at current position using raycasting
+    let groundElevation = 0
     
-    // Also query elevation from Cesium for ground height info
-    if (terrain && terrain.getElevationAtUTM) {
-      const terrainHeightMeters = await terrain.getElevationAtUTM(east, north)
-      const heightAboveGroundMeters = altitudeMeters - terrainHeightMeters
-      
-      // Update state with terrain height
-      airplaneState.groundHeight = terrainHeightMeters * SimulationConstants.METERS_TO_FEET
-      
-      // Collision if below 4 meters AGL
-      if (heightAboveGroundMeters < 4 && heightAboveGroundMeters > 0) {
-        console.log(`COLLISION: Height above ground=${heightAboveGroundMeters.toFixed(1)}m`)
-        document.location.href = "collision.html"
+    if (terrain && terrain.getGroundElevationAtPosition) {
+      const raycastElevation = terrain.getGroundElevationAtPosition(east, north)
+      if (raycastElevation !== null) {
+        groundElevation = raycastElevation
       }
     }
+    
+    // If no tile loaded yet, try async elevation query as fallback
+    if (groundElevation === 0 && terrain && terrain.getElevationAtUTM) {
+      groundElevation = await terrain.getElevationAtUTM(east, north)
+    }
+    
+    // Calculate height above ground
+    const heightAboveGround = altitudeMeters - groundElevation
+    
+    // Update state with actual terrain height
+    airplaneState.groundHeight = groundElevation * SimulationConstants.METERS_TO_FEET
+    
+    // COLLISION: Aircraft touches ground (less than 2 meters clearance)
+    if (heightAboveGround < 2 && altitudeMeters > 0) {
+      console.log(`COLLISION: Ground=${groundElevation.toFixed(0)}m, Alt=${altitudeMeters.toFixed(0)}m, AGL=${heightAboveGround.toFixed(1)}m`)\n      document.location.href = "collision.html"
+    }
   } catch (error) {
-    console.warn("Elevation query error:", error)
+    console.warn("Ground collision detection error:", error)
   }
-}, 1000)
+}, 100)
 
 // the actual program startup
 async function start() {

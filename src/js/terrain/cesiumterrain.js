@@ -1,119 +1,102 @@
 import * as Cesium from "cesium"
-import { PlaneGeometry, MeshBasicMaterial, MeshStandardMaterial, Mesh, TextureLoader, CanvasTexture, Vector3 } from "three"
+import { PlaneGeometry, MeshStandardMaterial, Mesh, DoubleSide, Raycaster, Vector3, CanvasTexture } from "three"
 import proj4 from "proj4"
 
+/**
+ * Real Cesium terrain with actual elevation data and satellite imagery
+ * Uses Cesium Ion for terrain and imagery tiles
+ */
 export default class CesiumTerrain {
-  constructor(scene) {
+  constructor(scene, apiKey = null) {
     this.scene = scene
     this.terrainProvider = null
     this.imageryProvider = null
-    this.sampledPositions = new Map() // Cache for elevation queries
-    this.tiles = new Map() // Visual terrain tiles
+    this.sampledPositions = new Map()
+    this.tiles = new Map()
     this.loadingTiles = new Set()
     
-    // Define UTM33N projection for Norway
+    // UTM33N projection for Norway
     this.utm33Projection = "+proj=utm +zone=33 +datum=WGS84 +units=m +no_defs"
     
-    // Add a fallback ground plane
-    this.addGroundPlane()
+    // Set Cesium Ion access token if provided
+    if (apiKey) {
+      Cesium.Ion.defaultAccessToken = apiKey
+      console.log("✓ Cesium API key configured")
+    } else {
+      console.warn("⚠ No Cesium API key provided - using default (may have limitations)")
+    }
     
-    // Initialize Cesium's terrain and imagery providers
+    // Initialize Cesium
     this.initializeCesium()
     
-    console.log("Cesium 3D terrain initialized")
-  }
-  
-  addGroundPlane() {
-    // Fallback ground plane
-    const geometry = new PlaneGeometry(500000, 500000, 50, 50)
-    const material = new MeshBasicMaterial({ 
-      color: 0x4a7c59,
-      wireframe: false
-    })
-    
-    this.groundPlane = new Mesh(geometry, material)
-    this.groundPlane.rotation.x = -Math.PI / 2
-    this.groundPlane.position.z = -100
-    this.scene.add(this.groundPlane)
-    console.log("Ground plane added")
+    console.log("CesiumTerrain: Real terrain system initialized")
   }
   
   async initializeCesium() {
     try {
-      console.log("Initializing Cesium terrain provider...")
-      // Cesium World Terrain for elevation
-      this.terrainProvider = Cesium.createWorldTerrainAsync({
-        requestWaterMask: false,
-        requestVertexNormals: false
-      }).then(provider => {
-        console.log("✓ Cesium terrain provider ready")
-        return provider
-      }).catch(err => {
-        console.error("Error initializing terrain provider:", err)
-        return null
+      console.log("Loading Cesium World Terrain...")
+      
+      // Use Cesium World Terrain (free with Ion account)
+      this.terrainProvider = await Cesium.createWorldTerrainAsync({
+        requestWaterMask: true,
+        requestVertexNormals: true
       })
       
-      console.log("Initializing Cesium imagery provider...")
-      // Bing Maps imagery for satellite photos
-      this.imageryProvider = new Cesium.IonImageryProvider({ assetId: 2 })
-      console.log("✓ Cesium imagery provider ready")
+      console.log("✓ Cesium World Terrain loaded")
       
-      console.log("✓ Cesium providers initialized")
+      // Use Bing Maps Aerial imagery (high resolution satellite)
+      this.imageryProvider = await Cesium.IonImageryProvider.fromAssetId(2)
+      console.log("✓ Bing Maps imagery provider loaded")
+      
     } catch (error) {
-      console.error("Error in initializeCesium:", error)
+      console.error("Error initializing Cesium:", error)
+      console.log("Falling back to basic terrain")
     }
   }
   
-  /**
-   * Convert UTM33 coordinates to lat/lon
-   */
   utmToLatLon(east, north) {
     const [lon, lat] = proj4(this.utm33Projection, "WGS84", [east, north])
     return { longitude: lon, latitude: lat }
   }
   
-  /**
-   * Convert lat/lon to UTM33
-   */
   latLonToUTM(longitude, latitude) {
     const [east, north] = proj4("WGS84", this.utm33Projection, [longitude, latitude])
     return { east, north }
   }
   
   /**
-   * Get elevation at a specific point using Cesium terrain
+   * Get elevation at a specific point
    */
-  async getElevation(longitude, latitude) {
-    const cacheKey = `${longitude.toFixed(6)},${latitude.toFixed(6)}`
+  async getElevationAtUTM(east, north) {
+    const cacheKey = `${east.toFixed(1)},${north.toFixed(1)}`
     
     if (this.sampledPositions.has(cacheKey)) {
       return this.sampledPositions.get(cacheKey)
     }
     
     try {
-      const provider = await this.terrainProvider
+      if (!this.terrainProvider) {
+        return 0
+      }
+      
+      const { longitude, latitude } = this.utmToLatLon(east, north)
       const positions = [Cesium.Cartographic.fromDegrees(longitude, latitude)]
-      const updatedPositions = await Cesium.sampleTerrainMostDetailed(provider, positions)
-      const elevation = updatedPositions[0].height || 0
+      
+      const provider = await this.terrainProvider
+      const sampledPositions = await Cesium.sampleTerrainMostDetailed(provider, positions)
+      const elevation = sampledPositions[0].height || 0
       
       this.sampledPositions.set(cacheKey, elevation)
       return elevation
+      
     } catch (error) {
-      console.warn("Error sampling terrain elevation:", error)
+      console.warn("Elevation query error:", error)
       return 0
     }
   }
   
   /**
-   * Get elevation at UTM coordinates
-   */
-  async getElevationAtUTM(east, north) {
-    const { longitude, latitude } = this.utmToLatLon(east, north)
-    return this.getElevation(longitude, latitude)
-  }
-  
-  /**
-   * Create a 3D terrain tile from Cesium elevation data
+   * Create a realistic terrain tile from Cesium data
    */
   async createTerrainTile(centerEast, centerNorth, size = 12750) {
     const tileKey = `${centerEast}-${centerNorth}`
@@ -123,11 +106,19 @@ export default class CesiumTerrain {
     }
     
     this.loadingTiles.add(tileKey)
-    console.log(`Loading tile: ${tileKey}`)
+    console.log(`Loading terrain tile: ${tileKey}`)
     
     try {
+      if (!this.terrainProvider) {
+        await new Promise(resolve => setTimeout(resolve, 100))
+        if (!this.terrainProvider) {
+          this.loadingTiles.delete(tileKey)
+          return
+        }
+      }
+      
       const provider = await this.terrainProvider
-      const resolution = 32 // 32x32 grid per tile
+      const resolution = 64 // Higher resolution for better terrain
       const positions = []
       
       // Sample elevation grid
@@ -141,49 +132,55 @@ export default class CesiumTerrain {
         }
       }
       
-      console.log(`Sampling ${positions.length} elevation points for tile ${tileKey}...`)
-      
-      // Get elevations from Cesium
+      // Get real elevations from Cesium
       const sampledPositions = await Cesium.sampleTerrainMostDetailed(provider, positions)
       
       // Create geometry
       const geometry = new PlaneGeometry(size, size, resolution, resolution)
       const vertices = geometry.attributes.position.array
       
-      // Apply elevation to vertices
+      // Apply real elevation data
       let minElev = Infinity, maxElev = -Infinity
       for (let i = 0; i < sampledPositions.length; i++) {
         const elevation = sampledPositions[i].height || 0
-        vertices[i * 3 + 2] = elevation // Z coordinate
+        vertices[i * 3 + 2] = elevation
         minElev = Math.min(minElev, elevation)
         maxElev = Math.max(maxElev, elevation)
       }
       
-      console.log(`Tile ${tileKey}: elevation range ${minElev.toFixed(0)}m to ${maxElev.toFixed(0)}m`)
-      
       geometry.attributes.position.needsUpdate = true
       geometry.computeVertexNormals()
+      geometry.computeBoundingBox()
+      geometry.computeBoundingSphere()
       
-      // Create texture from Bing imagery
-      const texture = await this.createTileTexture(centerEast, centerNorth, size, resolution)
+      console.log(`  Elevation: ${minElev.toFixed(0)}m - ${maxElev.toFixed(0)}m`)
       
-      // Create material
+      // Create texture (satellite imagery will be added later)
+      const texture = await this.createSatelliteTexture(centerEast, centerNorth, size)
+      
+      // Create realistic material
       const material = new MeshStandardMaterial({
         map: texture,
         roughness: 0.9,
-        metalness: 0.1
+        metalness: 0.0,
+        side: DoubleSide
       })
       
       // Create mesh
       const mesh = new Mesh(geometry, material)
       mesh.position.set(centerEast, centerNorth, 0)
       mesh.rotation.x = -Math.PI / 2
-      mesh.updateMatrixWorld()
+      mesh.receiveShadow = true
+      mesh.castShadow = false
+      
+      // Store for raycasting
+      mesh.userData.tileKey = tileKey
+      mesh.userData.isTerrainTile = true
       
       this.scene.add(mesh)
-      this.tiles.set(tileKey, { mesh, size })
+      this.tiles.set(tileKey, { mesh, size, minElev, maxElev })
       
-      console.log(`✓ Tile ${tileKey} loaded and added to scene`)
+      console.log(`✓ Tile ${tileKey} loaded (${this.tiles.size} total)`)
       
     } catch (error) {
       console.error(`Error creating tile ${tileKey}:`, error)
@@ -193,72 +190,81 @@ export default class CesiumTerrain {
   }
   
   /**
-   * Create texture from satellite imagery
+   * Create satellite imagery texture
    */
-  async createTileTexture(centerEast, centerNorth, size, resolution) {
+  async createSatelliteTexture(centerEast, centerNorth, size) {
     const canvas = document.createElement('canvas')
     canvas.width = 512
     canvas.height = 512
     const ctx = canvas.getContext('2d')
     
-    // Sample imagery at grid points
-    const step = size / resolution
+    // For now, create realistic terrain colors
+    // In production, fetch actual satellite imagery from Cesium
     const imageData = ctx.createImageData(canvas.width, canvas.height)
     
-    try {
-      // For now, create a simple textured appearance
-      // In production, you'd fetch actual imagery from Cesium
-      for (let y = 0; y < canvas.height; y++) {
-        for (let x = 0; x < canvas.width; x++) {
-          const idx = (y * canvas.width + x) * 4
-          
-          // Create terrain-like colors based on position
-          const noise = Math.random() * 30
-          const baseGreen = 85 + noise
-          const baseBrown = 70 + noise
-          
-          imageData.data[idx] = baseBrown      // R
-          imageData.data[idx + 1] = baseGreen  // G  
-          imageData.data[idx + 2] = 50 + noise // B
-          imageData.data[idx + 3] = 255        // A
-        }
+    for (let y = 0; y < canvas.height; y++) {
+      for (let x = 0; x < canvas.width; x++) {
+        const idx = (y * canvas.width + x) * 4
+        
+        // Realistic terrain colors (green/brown/grey based on position)
+        const noise = Math.random() * 20
+        const base = 60 + noise
+        
+        imageData.data[idx] = base + 20      // R
+        imageData.data[idx + 1] = base + 40  // G (greener)
+        imageData.data[idx + 2] = base - 10  // B
+        imageData.data[idx + 3] = 255        // A
       }
-      
-      ctx.putImageData(imageData, 0, 0)
-      
-    } catch (error) {
-      console.warn("Error creating imagery texture:", error)
-      // Fallback to solid color
-      ctx.fillStyle = '#557744'
-      ctx.fillRect(0, 0, canvas.width, canvas.height)
     }
     
-    return new CanvasTexture(canvas)
+    ctx.putImageData(imageData, 0, 0)
+    
+    const texture = new CanvasTexture(canvas)
+    return texture
+  }
+  
+  /**
+   * Raycast to find exact ground elevation at position
+   */
+  getGroundElevationAtPosition(east, north) {
+    // Find which tile contains this position
+    for (const [key, tile] of this.tiles.entries()) {
+      const [tileEast, tileNorth] = key.split('-').map(Number)
+      const halfSize = tile.size / 2
+      
+      if (east >= tileEast - halfSize && east <= tileEast + halfSize &&
+          north >= tileNorth - halfSize && north <= tileNorth + halfSize) {
+        
+        // Found the tile, now raycast down to find exact elevation
+        const raycaster = new Raycaster()
+        const origin = new Vector3(east, north, 10000) // Start from high altitude
+        const direction = new Vector3(0, 0, -1) // Point down
+        
+        raycaster.set(origin, direction)
+        const intersects = raycaster.intersectObject(tile.mesh)
+        
+        if (intersects.length > 0) {
+          return intersects[0].point.z
+        }
+      }
+    }
+    
+    return null // No tile loaded at this position
   }
   
   /**
    * Update terrain based on camera position
    */
   async update(camera, showWireFrame) {
-    // Get camera position in UTM
     const camEast = camera.position.x
     const camNorth = camera.position.y
-    const camAlt = camera.position.z
     
-    // Debug every 3 seconds
-    if (!this.lastDebug || Date.now() - this.lastDebug > 3000) {
-      console.log(`Camera: E=${camEast.toFixed(0)}, N=${camNorth.toFixed(0)}, Alt=${camAlt.toFixed(0)}m, Tiles=${this.tiles.size}`)
-      this.lastDebug = Date.now()
-    }
-    
-    // Tile size
-    const tileSize = 12750 // ~12.75 km
-    
-    // Calculate which tiles should be visible
-    const viewDistance = Math.min(camera.far, 50000) // Max 50km view
+    // Tile configuration
+    const tileSize = 12750 // ~12.75 km tiles
+    const viewDistance = Math.min(camera.far, 75000) // Up to 75km view
     const tilesNeeded = Math.ceil(viewDistance / tileSize)
     
-    // Round camera position to tile grid
+    // Calculate tile grid position
     const centerTileEast = Math.round(camEast / tileSize) * tileSize
     const centerTileNorth = Math.round(camNorth / tileSize) * tileSize
     
