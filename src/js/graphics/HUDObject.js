@@ -187,7 +187,7 @@ export default class HUDObject {
     // Clear canvas with transparent background
     this.ctx.clearRect(0, 0, this.width, this.height)
 
-    const hText = ("".padStart(3, "0"))
+    const hText = ("" + this.heading).padStart(3, "0")
 
     // Draw heading at bottom
     this.ctx.fillStyle = "#20ff40"
