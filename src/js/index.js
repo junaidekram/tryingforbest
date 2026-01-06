@@ -108,15 +108,16 @@ f16.visible = false
 scene.add(f16)
 
 const hudGeometry = new PlaneGeometry(1, 1)
-const hudMaterial = new MeshBasicMaterial({ color: 0xffff00 })
+const hudMaterial = new MeshBasicMaterial({ color: 0xffffff, transparent: true })
 const hudTexture = new CanvasTexture(hudCanvas)
+hudTexture.anisotropy = 1
 hudMaterial.map = hudTexture
-hudMaterial.transparent = true
 
 const hudPlane = new Mesh(hudGeometry, hudMaterial)
 hudPlane.position.set(0, 0, -2)
 hudPlane.updateMatrixWorld()
 camera.add(hudPlane)
+hudPlane.visible = true // HUD always visible in first-person
 
 // load the actual aircraft model into the scene
 loadAircraftModel(f16)
@@ -195,59 +196,74 @@ setInterval(() => {
 
   // get the tile
   const tile = terrain.tiles.get(`${x}-${y}`)
-  if (tile.loaded) {
-    const cameraElevation = camera.position.z * SimulationConstants.FEET_TO_METERS
+  if (tile && tile.loaded) {
+    const cameraElevationMeters = camera.position.z
     const tileGeometry = tile.tileMesh.geometry
 
     // in the GLB, y is up, so read max y to get max elevation
     const maxElevationInTile = tileGeometry.boundingBox.max.y
 
     // optimization: only do ray casting if we are below the max elevation for the tile
-    if (cameraElevation < maxElevationInTile) {
+    if (cameraElevationMeters < maxElevationInTile + 1000) {
       // set ray origin to the camera position
       // use relative coordinates inside the tile to match the geometry's coordinates
       // and convert from z up to y up
-      interSectionRay.origin.set(tileXOffset, camera.position.z, -tileYOffset)
+      interSectionRay.origin.set(tileXOffset, cameraElevationMeters, -tileYOffset)
 
       // cast a ray from the camera position and straight down towards the terrain
       const hit = tileGeometry.boundsTree.raycastFirst(interSectionRay)
 
       if (hit) {
-        const distanceToGround = hit.distance * SimulationConstants.METERS_TO_FEET
-        airplaneState.groundHeight = airplaneState.alt - distanceToGround
+        // Distance to ground in meters
+        const distanceToGroundMeters = hit.distance
+        // Convert terrain height to feet for state
+        const terrainHeightMeters = cameraElevationMeters - distanceToGroundMeters
+        airplaneState.groundHeight = terrainHeightMeters * SimulationConstants.METERS_TO_FEET
         
-        // Check if gear is touching ground
-        const gearClearance = distanceToGround - SimulationConstants.GEAR_HEIGHT
+        // Altitude in feet
+        const altitudeFeet = airplaneState.alt
+        const groundHeightFeet = airplaneState.groundHeight
+        const heightAboveGround = altitudeFeet - groundHeightFeet
         
-        if (gearClearance <= 0) {
+        // Check if gear is touching ground (within gear strut length)
+        const gearTouchesGround = heightAboveGround <= SimulationConstants.GEAR_HEIGHT
+        
+        if (gearTouchesGround) {
           // Gear is in contact with ground
           if (!airplaneState.onGround) {
             // Touchdown moment - check landing quality
             const verticalSpeed = Math.abs(airplaneState.verticalSpeed)
             const bankAngle = Math.abs(airplaneState.phi * SimulationConstants.RTOD)
             const pitchAngle = airplaneState.theta * SimulationConstants.RTOD
+            const airspeed = airplaneState.vt * 0.592484 // Convert to knots
             
-            // Crash conditions: hard landing, extreme bank, or gear up
-            if (verticalSpeed > SimulationConstants.HARD_LANDING_THRESHOLD || 
-                bankAngle > 10 || 
-                pitchAngle < -5 || 
-                pitchAngle > 15 ||
-                !airplaneState.gearDown) {
+            console.log(`Landing attempt: VS=${verticalSpeed.toFixed(1)} ft/s, Bank=${bankAngle.toFixed(1)}°, Pitch=${pitchAngle.toFixed(1)}°, Speed=${airspeed.toFixed(0)} kt, Gear=${airplaneState.gearDown}`)
+            
+            // Crash conditions: hard landing, extreme bank, bad pitch, too fast, or gear up
+            const hardLanding = verticalSpeed > SimulationConstants.HARD_LANDING_THRESHOLD
+            const extremeBank = bankAngle > 15
+            const badPitch = pitchAngle < -10 || pitchAngle > 20
+            const gearUp = !airplaneState.gearDown
+            const tooFast = airspeed > 200 // F-16 landing speed ~150-180 knots
+            
+            if (hardLanding || extremeBank || badPitch || gearUp || tooFast) {
+              console.log(`CRASH: Hard=${hardLanding} Bank=${extremeBank} Pitch=${badPitch} GearUp=${gearUp} Fast=${tooFast}`)
               document.location.href = "collision.html"
               return
             }
             
             // Successful touchdown
-            console.log(`Touchdown! Vertical speed: ${verticalSpeed.toFixed(1)} ft/sec, Bank: ${bankAngle.toFixed(1)}°, Pitch: ${pitchAngle.toFixed(1)}°`)
+            console.log(`✓ SUCCESSFUL LANDING! VS=${verticalSpeed.toFixed(1)} ft/s, Bank=${bankAngle.toFixed(1)}°, Pitch=${pitchAngle.toFixed(1)}°`)
           }
           airplaneState.onGround = true
-        } else if (gearClearance > 2) {
+        } else if (heightAboveGround > 20) {
           // Clear separation from ground
           airplaneState.onGround = false
         }
       } else {
         // No hit means we're underground - crash
         if (!airplaneState.onGround) {
+          console.log(`CRASH: Underground`)
           document.location.href = "collision.html"
         }
       }

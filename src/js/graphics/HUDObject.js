@@ -184,12 +184,26 @@ export default class HUDObject {
   }
 
   draw() {
+    // Clear canvas with transparent background
     this.ctx.clearRect(0, 0, this.width, this.height)
 
-    const hText = ("" + this.heading).padStart(3, "0")
+    const hText = ("".padStart(3, "0"))
 
-    this.drawText(hText, "center", 0.5 * this.width, 0.9 * this.height)
+    // Draw heading at bottom
+    this.ctx.fillStyle = "#20ff40"
+    this.ctx.font = "bold 2em Monaco"
+    this.ctx.textAlign = "center"
+    this.drawText(hText, "center", 0.5 * this.width, 0.95 * this.height)
+    
+    // Reset to default
+    this.ctx.fillStyle = "#20ff40"
+    this.ctx.font = "1.5em Monaco"
+    this.ctx.textAlign = "left"
+    
+    // Speed on left
     this.drawText(this.speed, "right", 0.1 * this.width, 0.5 * this.height)
+    
+    // Altitude on right
     this.drawText(this.altitude, "left", 0.85 * this.width, 0.5 * this.height)
 
     const aoaText = Math.round(this.aoa * MathUtils.RAD2DEG)
@@ -209,27 +223,29 @@ export default class HUDObject {
     const aglText = this.agl.toLocaleString(undefined, { maximumFractionDigits: 0 })
     this.ctx.fillText(`AGL ${aglText}`, 0.72 * this.width, 0.24 * this.height)
     
-    // Gear indicator - prominent display
+    // Gear indicator - prominent display at bottom left
     const gearText = this.gearDown ? "▼ GEAR DOWN" : "▲ GEAR UP"
-    this.ctx.fillStyle = this.gearDown ? "#20ff40" : "#ff4020"
+    this.ctx.fillStyle = this.gearDown ? "#20ff40" : "#ff2020"
+    this.ctx.font = "bold 2em Monaco"
+    this.ctx.textAlign = "left"
+    this.ctx.fillText(gearText, 20, 0.75 * this.height)
+    
+    // Speedbrake indicator - next to gear
+    const speedbrakeText = `SB: ${Math.round(this.speedbrake)}°`
+    this.ctx.fillStyle = this.speedbrake > 0 ? "#ffff00" : "#20ff40"
     this.ctx.font = "bold 1.8em Monaco"
-    this.ctx.fillText(gearText, 0.68 * this.width, 0.86 * this.height)
+    this.ctx.fillText(speedbrakeText, 20, 0.80 * this.height)
     
-    // Speedbrake indicator
-    const speedbrakeText = `SPEEDBRAKE ${Math.round(this.speedbrake)}°`
-    this.ctx.fillStyle = this.speedbrake > 0 ? "#ffff20" : "#20ff40"
-    this.ctx.fillText(speedbrakeText, 0.68 * this.width, 0.9 * this.height)
-    
-    // Reset font and color
-    this.ctx.font = "1.5em Monaco"
-    this.ctx.fillStyle = "#20ff40"
-    
-    // On ground indicator
+    // On ground indicator - prominent
     if (this.onGround) {
       this.ctx.fillStyle = "#40ff40"
-      this.ctx.fillText("● ON GROUND", 0.68 * this.width, 0.94 * this.height)
-      this.ctx.fillStyle = "#20ff40"
+      this.ctx.font = "bold 2em Monaco"
+      this.ctx.fillText("● ON GROUND", 20, 0.85 * this.height)
     }
+    
+    // Reset to default style
+    this.ctx.fillStyle = "#20ff40"
+    this.ctx.font = "1.5em Monaco"
 
     this.drawPitchLadder()
     this.drawFlightPathMarker()
