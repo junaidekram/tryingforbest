@@ -301,7 +301,8 @@ async function start() {
     
     // Initialize audio
     const audioContext = new window.AudioContext()
-    await audioContext.audioWorklet.addModule("js/audio/brown-noise-processor.js")
+    const workletPath = new URL("./audio/brown-noise-processor.js", import.meta.url).href
+    await audioContext.audioWorklet.addModule(workletPath)
     engineSound = new EngineSound()
 
     audioContext.resume()
